@@ -16,41 +16,7 @@ public class Meter {
         this.serial = Integer.parseInt(serial);
     }
 
-    //sending a message and returning a response
-    public String sendReturn(String message, int lengh) throws Exception {
-
-        System.out.println(serial);
-        String returnedMessage = null;
-        ByteBuffer outBuffer = ByteBuffer.allocate(7);
-        outBuffer.putInt(serial);
-        outBuffer.put(Hex.decodeHex(message));
-
-
-        byte[] crcBase = new byte[5]; //commented for Java 8 purposes
-        //outBuffer.get(0, crcBase, 0,5); // commented as Java 8 does not support the method;
-        System.out.println(outBuffer.remaining());
-        outBuffer.get(crcBase,0,5);
-
-
-        byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
-        outBuffer.put(crc16);
-        //initializing port and waking up the meter
-        initSerialPort();
-        port.writeBytes(outBuffer.array(), 7);
-        //waiting bytes to arrive
-        Thread.sleep(100);
-        port.writeBytes(outBuffer.array(), 7);
-        int bytesAvailable = port.bytesAvailable();
-        byte[] buffer = new byte[bytesAvailable];
-        port.readBytes(buffer, bytesAvailable);
-        //forming byte incoming buffer
-        byte[] response = Arrays.copyOfRange(buffer, 5, bytesAvailable-1);
-        returnedMessage = Hex.encodeHexString(response);
-        port.closePort();
-        return  returnedMessage;
-    }
-
-    //to work with opened port
+        //Senging string 1-Byte command and getting a response. Works with already initialized port.
     private String getResponse(String message, int length) throws Exception{
 
         String returnedMessage = null;
@@ -74,10 +40,9 @@ public class Meter {
         returnedMessage = Hex.encodeHexString(response);
         //port.closePort();
         return  returnedMessage;
-
     }
 
-    //to get all Readings
+    //to get all Readings - see Readings class.
     public Readings getReadings() throws Exception {
 
         initSerialPort();
@@ -119,8 +84,9 @@ public class Meter {
 
     //get meter's Serial number
     public int getSerialNum() throws Exception{
-        return Integer.valueOf((this.sendReturn("2F", 11)),16);
-        //return this.sendReturn("2F", 11);
+        initSerialPort();
+        port.closePort();
+        return Integer.valueOf((this.getResponse("2F", 11)),16);
     }
 
     private void initSerialPort() throws Exception {
@@ -131,12 +97,13 @@ public class Meter {
         port.setNumDataBits(8);
         port.setBaudRate(9600);
 
+        //Preparing a wake up call - 2F - request Meter's number to never recieve;
             ByteBuffer wakeupBuffer = ByteBuffer.allocate(7);
             wakeupBuffer.putInt(serial);
             wakeupBuffer.put(Hex.decodeHex("2F"));
             wakeupBuffer.position(0);
 
-            //Preparing a wake up call;
+
             byte[] crcBase = new byte[5];
             wakeupBuffer.get(crcBase,0,5);
 
@@ -145,14 +112,10 @@ public class Meter {
 
             //Waking up
             port.writeBytes(wakeupBuffer.array(), 7);
-            Thread.sleep(200);
+            Thread.sleep(200); //It takes long to wake up after 1st command sent;
             //flushing buffer
             port.closePort();
             port.openPort();
     }
-
-
-
-
 
 }
