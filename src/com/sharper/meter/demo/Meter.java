@@ -34,17 +34,18 @@ public class Meter {
 
         byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
         outBuffer.put(crc16);
-
+        //initializing port and waking up the meter
         initSerialPort();
         port.writeBytes(outBuffer.array(), 7);
+        //waiting bytes to arrive
         Thread.sleep(100);
         port.writeBytes(outBuffer.array(), 7);
         int bytesAvailable = port.bytesAvailable();
         byte[] buffer = new byte[bytesAvailable];
         port.readBytes(buffer, bytesAvailable);
+        //forming byte incoming buffer
         byte[] response = Arrays.copyOfRange(buffer, 5, bytesAvailable-1);
         returnedMessage = Hex.encodeHexString(response);
-
         port.closePort();
         return  returnedMessage;
     }
@@ -64,21 +65,22 @@ public class Meter {
         byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
         outBuffer.put(crc16);
 
-        initSerialPort();
+        //initSerialPort();
         port.writeBytes(outBuffer.array(), 7);
         byte[] buffer = new byte[length];
         Thread.sleep(100);
         port.readBytes(buffer, length);
         byte[] response = Arrays.copyOfRange(buffer, 5, length-2);
         returnedMessage = Hex.encodeHexString(response);
+        //port.closePort();
         return  returnedMessage;
+
     }
 
     //to get all Readings
     public Readings getReadings() throws Exception {
 
         initSerialPort();
-
         int serialNum = Integer.valueOf(getResponse("2F",11),16);
         String readings = getResponse("27",23);
         float day = Float.parseFloat(readings.substring(0,8))/100;
@@ -89,37 +91,8 @@ public class Meter {
         float power = Float.parseFloat(instant.substring(8, 14))/1000;
         Readings result = new Readings(serialNum,day,night,current,power,voltage);
         port.closePort();
-
         return result;
     }
-
-//    //get values of meter
-//    public float[] getValues() throws Exception{
-//        String response = this.sendReturn("27", 23);
-//        float day = Float.parseFloat(response.substring(0,8))/100;
-//        float night = Float.parseFloat(response.substring(8,16))/100;
-//
-//        float[] result = new float[2];
-//        result[0] = day;
-//        result[1] = night;
-//
-//        return result;
-//
-//    }
-
-//    public void getUIP() throws Exception{
-//        String response = this.sendReturn("63", 14);
-//
-//        float voltage = Float.parseFloat(response.substring(0,4))/10;
-//        float current = Float.parseFloat(response.substring(4,8))/100;
-//        float power = Float.parseFloat(response.substring(8))/1000;
-//
-//        System.out.println(
-//                voltage + " " +
-//                current + " " +
-//                power);
-//
-//    }
 
     //modbus CRC16 calculation
     private byte[] crc16(byte[] message){
@@ -163,14 +136,17 @@ public class Meter {
             wakeupBuffer.put(Hex.decodeHex("2F"));
             wakeupBuffer.position(0);
 
+            //Preparing a wake up call;
             byte[] crcBase = new byte[5];
             wakeupBuffer.get(crcBase,0,5);
 
             byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
             wakeupBuffer.put(crc16);
 
+            //Waking up
             port.writeBytes(wakeupBuffer.array(), 7);
             Thread.sleep(200);
+            //flushing buffer
             port.closePort();
             port.openPort();
     }

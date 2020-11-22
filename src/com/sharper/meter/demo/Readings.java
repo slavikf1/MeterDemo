@@ -33,6 +33,10 @@ public class Readings {
         return formatter.format(this.date);
     }
 
+    public Date getDate() {
+        return date;
+    }
+
     public float getDay() {
         return day;
     }
