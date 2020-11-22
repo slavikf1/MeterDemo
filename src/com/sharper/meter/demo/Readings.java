@@ -55,6 +55,6 @@ public class Readings {
 
     public String toString(){
         return serialNum + " on " + getDateString() + ": " + "day: " + day + " night: "+night + "\n" + "V: "+ voltage +
-                "Cur: " + current +"P: "+ power;
+                " Current: " + current +" Power: "+ power;
     }
 }

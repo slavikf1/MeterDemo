@@ -1,6 +1,6 @@
 package com.sharper.meter.demo;
 
-import jssc.SerialPort;
+import com.fazecast.jSerialComm.SerialPort;
 import org.apache.commons.codec.binary.Hex;
 
 import java.nio.ByteBuffer;
@@ -12,33 +12,37 @@ public class Meter {
     private final int serial;
 
     Meter(String name, String serial){
-        this.port = new SerialPort(name);
+        this.port = SerialPort.getCommPort(name);
         this.serial = Integer.parseInt(serial);
     }
 
     //sending a message and returning a response
     public String sendReturn(String message, int lengh) throws Exception {
 
+        System.out.println(serial);
         String returnedMessage = null;
         ByteBuffer outBuffer = ByteBuffer.allocate(7);
         outBuffer.putInt(serial);
         outBuffer.put(Hex.decodeHex(message));
 
-        byte[] crcBase = new byte[5];
-        outBuffer.get(0, crcBase, 0,5);
+
+        byte[] crcBase = new byte[5]; //commented for Java 8 purposes
+        //outBuffer.get(0, crcBase, 0,5); // commented as Java 8 does not support the method;
+        System.out.println(outBuffer.remaining());
+        outBuffer.get(crcBase,0,5);
+
 
         byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
         outBuffer.put(crc16);
 
-        port.openPort(); //opening serialport
-        port.purgePort(SerialPort.PURGE_TXCLEAR | SerialPort.PURGE_RXCLEAR);
-        port.setParams(SerialPort.BAUDRATE_9600, SerialPort.DATABITS_8, SerialPort.STOPBITS_1, SerialPort.PARITY_NONE); //setting parameters
-        //port.setFlowControlMode(SerialPort.FLOWCONTROL_RTSCTS_IN | SerialPort.FLOWCONTROL_RTSCTS_OUT); //setting parameters
-        port.writeBytes(outBuffer.array());
-        //Thread.sleep(50);
-        port.writeBytes(outBuffer.array());
-
-        byte[] response = Arrays.copyOfRange(port.readBytes(lengh,100),5,lengh-2);
+        initSerialPort();
+        port.writeBytes(outBuffer.array(), 7);
+        Thread.sleep(100);
+        port.writeBytes(outBuffer.array(), 7);
+        int bytesAvailable = port.bytesAvailable();
+        byte[] buffer = new byte[bytesAvailable];
+        port.readBytes(buffer, bytesAvailable);
+        byte[] response = Arrays.copyOfRange(buffer, 5, bytesAvailable-1);
         returnedMessage = Hex.encodeHexString(response);
 
         port.closePort();
@@ -52,19 +56,20 @@ public class Meter {
         ByteBuffer outBuffer = ByteBuffer.allocate(7);
         outBuffer.putInt(serial);
         outBuffer.put(Hex.decodeHex(message));
+        outBuffer.position(0);
 
         byte[] crcBase = new byte[5];
-        outBuffer.get(0, crcBase, 0,5);
+        outBuffer.get(crcBase,0,5);
 
         byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
         outBuffer.put(crc16);
 
-        port.purgePort(SerialPort.PURGE_TXCLEAR | SerialPort.PURGE_RXCLEAR);
-        port.writeBytes(outBuffer.array());
-        Thread.sleep(50);
-        port.writeBytes(outBuffer.array());
-
-        byte[] response = Arrays.copyOfRange(port.readBytes(length,100),5,length-2);
+        initSerialPort();
+        port.writeBytes(outBuffer.array(), 7);
+        byte[] buffer = new byte[length];
+        Thread.sleep(100);
+        port.readBytes(buffer, length);
+        byte[] response = Arrays.copyOfRange(buffer, 5, length-2);
         returnedMessage = Hex.encodeHexString(response);
         return  returnedMessage;
     }
@@ -72,35 +77,35 @@ public class Meter {
     //to get all Readings
     public Readings getReadings() throws Exception {
 
-        port.openPort(); //opening serialport
-        port.setParams(SerialPort.BAUDRATE_9600, SerialPort.DATABITS_8, SerialPort.STOPBITS_1, SerialPort.PARITY_NONE); //setting parameters
+        initSerialPort();
 
         int serialNum = Integer.valueOf(getResponse("2F",11),16);
-        float day = Float.parseFloat(getResponse("27",23).substring(0,8))/100;
-        float night = Float.parseFloat(getResponse("27", 23).substring(8,16))/100;
-        float voltage = Float.parseFloat(getResponse("63", 14).substring(0,4))/10;
-        float current = Float.parseFloat(getResponse("63", 14).substring(4,8))/100;
-        float power = Float.parseFloat(getResponse("63", 14).substring(8))/1000;
-
+        String readings = getResponse("27",23);
+        float day = Float.parseFloat(readings.substring(0,8))/100;
+        float night = Float.parseFloat(readings.substring(8,16))/100;
+        String instant = getResponse("63",14);
+        float voltage = Float.parseFloat(instant.substring(0,4))/10;
+        float current = Float.parseFloat(instant.substring(4,8))/100;
+        float power = Float.parseFloat(instant.substring(8, 14))/1000;
         Readings result = new Readings(serialNum,day,night,current,power,voltage);
         port.closePort();
 
         return result;
     }
 
-    //get values of meter
-    public float[] getValues() throws Exception{
-        String response = this.sendReturn("27", 23);
-        float day = Float.parseFloat(response.substring(0,8))/100;
-        float night = Float.parseFloat(response.substring(8,16))/100;
-
-        float[] result = new float[2];
-        result[0] = day;
-        result[1] = night;
-
-        return result;
-
-    }
+//    //get values of meter
+//    public float[] getValues() throws Exception{
+//        String response = this.sendReturn("27", 23);
+//        float day = Float.parseFloat(response.substring(0,8))/100;
+//        float night = Float.parseFloat(response.substring(8,16))/100;
+//
+//        float[] result = new float[2];
+//        result[0] = day;
+//        result[1] = night;
+//
+//        return result;
+//
+//    }
 
 //    public void getUIP() throws Exception{
 //        String response = this.sendReturn("63", 14);
@@ -143,6 +148,31 @@ public class Meter {
     public int getSerialNum() throws Exception{
         return Integer.valueOf((this.sendReturn("2F", 11)),16);
         //return this.sendReturn("2F", 11);
+    }
+
+    private void initSerialPort() throws Exception {
+
+        port.openPort();
+        port.setParity(SerialPort.NO_PARITY);
+        port.setNumStopBits(SerialPort.ONE_STOP_BIT);
+        port.setNumDataBits(8);
+        port.setBaudRate(9600);
+
+            ByteBuffer wakeupBuffer = ByteBuffer.allocate(7);
+            wakeupBuffer.putInt(serial);
+            wakeupBuffer.put(Hex.decodeHex("2F"));
+            wakeupBuffer.position(0);
+
+            byte[] crcBase = new byte[5];
+            wakeupBuffer.get(crcBase,0,5);
+
+            byte[] crc16 = crc16(crcBase); //base array to get CRC16 value
+            wakeupBuffer.put(crc16);
+
+            port.writeBytes(wakeupBuffer.array(), 7);
+            Thread.sleep(200);
+            port.closePort();
+            port.openPort();
     }
 
 
